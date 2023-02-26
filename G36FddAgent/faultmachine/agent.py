@@ -49,53 +49,11 @@ class Faultmachine(Agent):
     Document agent constructor here.
     """
 
-    def __init__(self, setting1=1, setting2="some/random/topic", **kwargs):
+    def __init__(self, **kwargs):
         super(Faultmachine, self).__init__(**kwargs)
         _log.info("vip_identity: " + self.core.identity)
-
-        self.default_config = {
-            "ahu_instance_id": "1100",
-            "building_topic": "slipstream_internal/slipstream_hq",
-            "duct_static_setpoint": "Duct Static Pressure Setpoint Active",
-            "duct_static": "Duct Static Pressure Local",
-            "vfd_speed": "Supply Fan Speed Command",
-        }
-
-        ahu_instance_id = str(self.default_config["ahu_instance_id"])
-        building_topic = str(self.default_config["building_topic"])
-        duct_static_setpoint = str(self.default_config["duct_static_setpoint"])
-        duct_static = str(self.default_config["duct_static"])
-        vfd_speed = str(self.default_config["vfd_speed"])
-
-        self.ahu_instance_id = ahu_instance_id
-        self.building_topic = building_topic
-        self.duct_static_setpoint = duct_static_setpoint
-        self.duct_static = duct_static
-        self.vfd_speed = vfd_speed
-
-        self.nested_group_map = {"air_handlers": {"AHU1": "1100"}}
-
-        self.ahu_subscription = "/".join(
-            ["devices", self.building_topic, self.ahu_instance_id]
-        )
-        self.duct_static_setpoint_topic = "/".join(
-            [self.building_topic, self.ahu_instance_id, self.duct_static_setpoint]
-        )
-        self.duct_static_topic = "/".join(
-            [self.building_topic, self.ahu_instance_id, self.duct_static]
-        )
-        self.vfd_speed_topic = "/".join(
-            [self.building_topic, self.ahu_instance_id, self.vfd_speed]
-        )
-
-        self.duct_static_setpoint_data = []
-        self.duct_static_data = []
-        self.vfd_speed_data = []
-
-        # G36 FC1 params for the FDD algorithm
-        self.vfd_speed_percent_err_thres = 0.05
-        self.duct_static_inches_err_thres = 0.99
-        self.vfd_speed_percent_max = 0.1
+        
+        self.default_config = {}
 
         # Set a default configuration to ensure that self.configure is called immediately to setup
         # the agent.
@@ -104,6 +62,15 @@ class Faultmachine(Agent):
         self.vip.config.subscribe(
             self.configure, actions=["NEW", "UPDATE"], pattern="config"
         )
+        
+        self.duct_static_setpoint_data = []
+        self.duct_static_data = []
+        self.vfd_speed_data = []
+
+        # G36 default FC1 params for the FDD algorithm
+        self.vfd_speed_percent_err_thres = 0.05
+        self.duct_static_inches_err_thres = 0.99
+        self.vfd_speed_percent_max = 0.1
 
     def configure(self, config_name, action, contents):
         """
@@ -118,11 +85,16 @@ class Faultmachine(Agent):
         _log.info("[G36 Agent INFO] - Configuring Agent")
 
         try:
-            ahu_instance_id = str(config["ahu_instance_id"])
-            building_topic = str(config["building_topic"])
-            duct_static_setpoint = str(config["duct_static_setpoint"])
-            duct_static = str(config["duct_static"])
-            vfd_speed = str(config["vfd_speed"])
+            _log.info(f"[G36 Agent INFO] - {config}")
+            
+            for fault in config:
+                _log.info(f"[G36 Agent INFO] - {fault}")
+                        
+                ahu_instance_id = str(config["ahu_instance_id"])
+                building_topic = str(config["building_topic"])
+                duct_static_setpoint = str(config["duct_static_setpoint"])
+                duct_static = str(config["duct_static"])
+                vfd_speed = str(config["vfd_speed"])
 
         except ValueError as e:
             _log.error(
@@ -136,17 +108,18 @@ class Faultmachine(Agent):
         self.duct_static = duct_static
         self.vfd_speed = vfd_speed
 
-        self.duct_static_setpoint_topic = "/".join(
-            [self.building_topic, self.ahu_instance_id, self.duct_static_setpoint]
-        )
-        self.duct_static_topic = "/".join(
-            [self.building_topic, self.ahu_instance_id, self.duct_static]
-        )
-        self.vfd_speed_topic = "/".join(
-            [self.building_topic, self.ahu_instance_id, self.vfd_speed]
-        )
-
         _log.info("[G36 Agent INFO] - Configs Set Success")
+        
+        subscription_prefix = f"devices/{self.building_topic}/{self.ahu_instance_id}/"
+        _log.info(f"[G36 Agent INFO] - subscribe to: {subscription_prefix}")
+
+        self.vip.pubsub.subscribe(
+            peer="pubsub",
+            prefix=subscription_prefix,
+            callback=self._handle_publish,
+        )
+        
+        _log.info("[G36 Agent INFO] - Subscribe Success!!")
 
     def _create_subscriptions(self, topics):
         """
@@ -172,9 +145,7 @@ class Faultmachine(Agent):
         :param message: "All" messaged published by the Platform Driver for the CSV Driver containing values for all
         registers on the device
         """
-
-        # _log.info(f"[G36 Agent INFO] - INCOMING AHU Data: {message[0]}")
-
+        
         topic = topic.strip("/all")
         _log.info(f"*** [G36 Agent INFO] *** topic_formatted {topic}")
         _log.info(f"*** [G36 Agent INFO] *** message[0] is {message[0]}")
@@ -222,11 +193,6 @@ class Faultmachine(Agent):
 
             df = df.rolling(window=5).mean().dropna()
             _log.info(f"[G36 Agent INFO] - rolling df is {df}")
-
-            '''
-            df_lastrow = df.iloc[-1:]
-            _log.info(f"[G36 Agent INFO] - df last row is {df_lastrow}")
-            '''
             
             _fc1 = FaultConditionOne(
                 self.vfd_speed_percent_err_thres,
@@ -239,7 +205,11 @@ class Faultmachine(Agent):
 
             df2 = _fc1.apply(df)
             
-            _log.info(f"[G36 Agent INFO] - fault_condition_one is {df2.fc1_flag.value}")
+            # Pandas df access the fault element in the last row
+            # Int of one is Fault and zero for no fault
+            fc1_fault = df2.at[df2.index[-1], 'fc1_flag']
+            
+            _log.info(f"[G36 Agent INFO] - fault_condition_one is {fc1_fault}")
 
             self.duct_static_setpoint_data.clear()
             self.duct_static_data.clear()
@@ -266,19 +236,9 @@ class Faultmachine(Agent):
         Called after any configurations methods that are called at startup.
 
         Usually not needed if using the configuration store.
-        prefix="devices/slipstream_internal/slipstream_hq/1100/"
         """
+        pass
 
-        subscription_prefix = f"devices/{self.building_topic}/{self.ahu_instance_id}/"
-        _log.info(f"[G36 Agent INFO] - subscribe to: {subscription_prefix}")
-
-        self.vip.pubsub.subscribe(
-            peer="pubsub",
-            prefix=subscription_prefix,
-            callback=self._handle_publish,
-        )
-
-        #self.core.periodic(10, self.fault_checker)
 
     @Core.receiver("onstop")
     def onstop(self, sender, **kwargs):

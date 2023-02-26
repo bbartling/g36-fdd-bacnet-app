@@ -16,6 +16,15 @@ $ python scripts/install-agent.py -s ./G36FddAgent -c ./G36FddAgent/config  --ta
 $ vctl start --tag fdd_agent
 ```
 
+Watch log files with :
+```shell
+tail -f volttron.log | grep "G36 Agent INFO"
+```
+or Watch log files showing only the fault outputs that updates on 5 minute intervals:
+```shell
+tail -f volttron.log | grep "fault_condition_one"
+```
+
 G36 requires data to be scraped on 1 minute intervals and for data to be in a 5 minute rolling average format. 
 This agent requires that the BACnet system is being scraped on one minute intervals where then internally 
 Python code in this agent uses the Pandas library that will accomodate the rolling average computations and then publish 

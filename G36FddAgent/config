@@ -1,8 +1,18 @@
 {
-  "ahu_instance_id" : "1100" ,
-  "building_topic" : "slipstream_internal/slipstream_hq",
-  "duct_static_setpoint" : "Duct Static Pressure Setpoint Active",
-  "duct_static" : "Duct Static Pressure Local",
-  "vfd_speed" : "Supply Fan Speed Command"
+  "faults": [
+    {
+      "type": "fc1",
+      "instance": "slipstream_internal/slipstream_hq/1100",
+      "inputs": {
+        "duct_static_setpoint": "Duct Static Pressure Setpoint Active",
+        "duct_static": "Duct Static Pressure Local",
+        "vfd_speed": "Supply Fan Speed Command"
+      },
+      "parameters": {
+        "vfd_speed_percent_err_thres": 0.05,
+        "duct_static_inches_err_thres": 0.99,
+        "vfd_speed_percent_max": 0.1
+      }
+    }
+  ]
 }
-
