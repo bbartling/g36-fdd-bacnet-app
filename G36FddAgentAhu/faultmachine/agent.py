@@ -20,6 +20,11 @@ utils.setup_logging()
 __version__ = "0.1"
 
 
+# for each AHU as defined by config file
+class AhuSystem:
+    pass
+
+
 def faultmachine(config_path, **kwargs):
     """
     Parses the Agent configuration and returns an instance of
@@ -52,7 +57,7 @@ class Faultmachine(Agent):
     def __init__(self, **kwargs):
         super(Faultmachine, self).__init__(**kwargs)
         _log.info("vip_identity: " + self.core.identity)
-        
+
         self.default_config = {}
 
         # Set a default configuration to ensure that self.configure is called immediately to setup
@@ -62,10 +67,8 @@ class Faultmachine(Agent):
         self.vip.config.subscribe(
             self.configure, actions=["NEW", "UPDATE"], pattern="config"
         )
-        
-        self.duct_static_setpoint_data = []
-        self.duct_static_data = []
-        self.vfd_speed_data = []
+
+        self.ahus_as_a_class = []
 
         # G36 default FC1 params for the FDD algorithm
         self.vfd_speed_percent_err_thres = 0.05
@@ -83,18 +86,57 @@ class Faultmachine(Agent):
         config.update(contents)
 
         _log.info("[G36 Agent INFO] - Configuring Agent")
+        
+        device_num_init = 0
+        device_num = device_num_init
 
         try:
             _log.info(f"[G36 Agent INFO] - {config}")
-            
-            for fault in config:
-                _log.info(f"[G36 Agent INFO] - {fault}")
-                        
-                ahu_instance_id = str(config["ahu_instance_id"])
-                building_topic = str(config["building_topic"])
-                duct_static_setpoint = str(config["duct_static_setpoint"])
-                duct_static = str(config["duct_static"])
-                vfd_speed = str(config["vfd_speed"])
+
+            for ahu, device_attributes in config.items():
+                #_log.info(f"device: {device}")
+                #_log.info(f"device_attributes: {device_attributes}")
+
+                device_num = AhuSystem()
+                self.ahus_as_a_class.append(device_num)
+
+                variables = device_attributes[0].get("variables")
+                device = device_attributes[0].get("device")
+                topic = device_attributes[0].get("topic")
+
+                for variable, point_name in variables[0].items():
+                    setattr(device_num, variable, point_name)
+
+                # create empty list in the class and append new data from info on msg bus
+                setattr(device_num, "duct_static_setpoint_data", list())
+                setattr(device_num, "duct_static_data", list())
+                setattr(device_num, "vfd_speed_data", list())
+                setattr(device_num, "cooling_valve_data", list())
+                setattr(device_num, "heating_valve_data", list())
+                setattr(device_num, "mixing_dampers_data", list())
+                setattr(device_num, "supply_air_volume_data", list())
+                setattr(device_num, "supply_air_pressure_data", list())
+                setattr(device_num, "supply_air_pressure_setpoint_data", list())
+                setattr(device_num, "supply_air_temp_data", list())
+                setattr(device_num, "supply_air_temp_setpoint_data", list())
+                setattr(device_num, "mixing_air_temp_data", list())
+                setattr(device_num, "outdoor_air_temp_data", list())
+
+                _log.info(f"[G36 Agent INFO] - Configs Set Success for {ahu}")
+
+                subscription_prefix = f"devices/{topic}/{device}/"
+                _log.info(f"[G36 Agent INFO] - subscribe to: {subscription_prefix}")
+
+                # subscribe to this device
+                self.vip.pubsub.subscribe(
+                    peer="pubsub",
+                    prefix=subscription_prefix,
+                    callback=self._handle_publish,
+                )
+                
+                device_num_init += 1
+
+                _log.info(f"[G36 Agent INFO] - Subscribition Success on device: {device}!!")
 
         except ValueError as e:
             _log.error(
@@ -102,24 +144,8 @@ class Faultmachine(Agent):
             )
             return
 
-        self.ahu_instance_id = ahu_instance_id
-        self.building_topic = building_topic
-        self.duct_static_setpoint = duct_static_setpoint
-        self.duct_static = duct_static
-        self.vfd_speed = vfd_speed
+        _log.info("[G36 Agent INFO] - ALL Subscribition Success!!")
 
-        _log.info("[G36 Agent INFO] - Configs Set Success")
-        
-        subscription_prefix = f"devices/{self.building_topic}/{self.ahu_instance_id}/"
-        _log.info(f"[G36 Agent INFO] - subscribe to: {subscription_prefix}")
-
-        self.vip.pubsub.subscribe(
-            peer="pubsub",
-            prefix=subscription_prefix,
-            callback=self._handle_publish,
-        )
-        
-        _log.info("[G36 Agent INFO] - Subscribe Success!!")
 
     def _create_subscriptions(self, topics):
         """
@@ -145,55 +171,68 @@ class Faultmachine(Agent):
         :param message: "All" messaged published by the Platform Driver for the CSV Driver containing values for all
         registers on the device
         """
-        
-        topic = topic.strip("/all")
-        _log.info(f"*** [G36 Agent INFO] *** topic_formatted {topic}")
-        _log.info(f"*** [G36 Agent INFO] *** message[0] is {message[0]}")
+        for ahu in self.ahus_as_a_class:
+            topic = topic.strip("/all")
+            _log.info(f"*** [G36 Agent INFO] *** {ahu} {topic}")
+            _log.info(f"*** [G36 Agent INFO] *** {ahu} {message[0]}")
 
-        # append value for the duct pressure setpoint
-        duct_static_setpoint_ = message[0].get(self.duct_static_setpoint)
-        _log.info(
-            f"[G36 Agent INFO] - Duct Static Pressure Setpoint is: {duct_static_setpoint_}"
-        )
-        self.duct_static_setpoint_data.append(duct_static_setpoint_)
-
-        # append value for the duct pressure
-        duct_static_ = message[0].get(self.duct_static)
-        _log.info(f"[G36 Agent INFO] - Duct Static Pressure is: {duct_static_}")
-        self.duct_static_data.append(duct_static_)
-
-        # append value for the vfd speed
-        vfd_speed_ = message[0].get(self.vfd_speed)
-        _log.info(f"[G36 Agent INFO] - AHU Fan VFD Speed is: {vfd_speed_}")
-        self.vfd_speed_data.append(vfd_speed_)
-
-        self.fault_checker()
-        
-        
-    def fault_checker(self):
-        _log.info(f"[G36 Agent INFO] - fault_checker GO!: \
-            {len(self.duct_static_setpoint_data)}")
-
-        if len(self.duct_static_setpoint_data) < 5:
+            # append value for the duct pressure setpoint
+            duct_static_setpoint_ = message[0].get(getattr(ahu, "duct_static_setpoint"))
             _log.info(
-                f"[G36 Agent INFO] - Not enough accumilated data to run fault checker")
+                f"[G36 Agent INFO] - Duct Static Pressure Setpoint is: {duct_static_setpoint_}"
+            )
+            getattr(ahu, "duct_static_setpoint_data").append(duct_static_setpoint_)
+
+            # append value for the duct pressure
+            duct_static_ = message[0].get(getattr(ahu, "duct_static"))
+            _log.info(f"[G36 Agent INFO] - Duct Static Pressure is: {duct_static_}")
+            getattr(ahu, "duct_static_data").append(duct_static_)
+
+            # append value for the vfd speed
+            vfd_speed_ = message[0].get(getattr(ahu, "vfd_speed"))
+            _log.info(f"[G36 Agent INFO] - AHU Fan VFD Speed is: {vfd_speed_}")
+            getattr(ahu, "vfd_speed_data").append(vfd_speed_)
+
+            # pass this class to see if enough data to calc rolling avg
+            '''
+            TODO implement if else for each fc equation and a pass if its
+            not inside the config OMIT
+            '''
+            self.fault_checker_fc1(ahu)
+            
+            # future all the way up to fc 13
+            #self.fault_checker_fc2(ahu)
+            #self.fault_checker_fc3(ahu)
+            #self.fault_checker_fc4(ahu)
+            #self.fault_checker_fc5(ahu)
+            #self.fault_checker_fc6(ahu)
+            #self.fault_checker_fc7(ahu)
+
+    def fault_checker_fc1(self, ahu):
+        len_of_list = len(getattr(ahu, "duct_static_setpoint_data"))
+
+        _log.info(f"[G36 Agent INFO] - fault_checker GO! on: {ahu} is {len_of_list}")
+
+        if len_of_list < 5:
+            _log.info(
+                f"[G36 Agent INFO] - Not enough accumilated data to run fault checker"
+            )
             return
 
         else:
-
             data = {
-                "duct_static": self.duct_static_data, 
-                "duct_static_setpoint": self.duct_static_setpoint_data, 
-                "supply_vfd_speed": self.vfd_speed_data
+                "duct_static_setpoint": getattr(ahu, "duct_static_setpoint_data"),
+                "duct_static": getattr(ahu, "duct_static_data"),
+                "supply_vfd_speed": getattr(ahu, "vfd_speed_data"),
             }
-            
+
             df = pd.DataFrame(data)
-            
+
             _log.info(f"[G36 Agent INFO] - NOT rolling df is {df}")
 
             df = df.rolling(window=5).mean().dropna()
             _log.info(f"[G36 Agent INFO] - rolling df is {df}")
-            
+
             _fc1 = FaultConditionOne(
                 self.vfd_speed_percent_err_thres,
                 self.duct_static_inches_err_thres,
@@ -204,16 +243,16 @@ class Faultmachine(Agent):
             )
 
             df2 = _fc1.apply(df)
-            
+
             # Pandas df access the fault element in the last row
             # Int of one is Fault and zero for no fault
-            fc1_fault = df2.at[df2.index[-1], 'fc1_flag']
-            
+            fc1_fault = df2.at[df2.index[-1], "fc1_flag"]
+
             _log.info(f"[G36 Agent INFO] - fault_condition_one is {fc1_fault}")
 
-            self.duct_static_setpoint_data.clear()
-            self.duct_static_data.clear()
-            self.vfd_speed_data.clear()
+            getattr(ahu, "duct_static_setpoint_data").clear()
+            getattr(ahu, "duct_static_data").clear()
+            getattr(ahu, "vfd_speed_data").clear()
 
             """
             #publish to message bus
@@ -238,7 +277,6 @@ class Faultmachine(Agent):
         Usually not needed if using the configuration store.
         """
         pass
-
 
     @Core.receiver("onstop")
     def onstop(self, sender, **kwargs):

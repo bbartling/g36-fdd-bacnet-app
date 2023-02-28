@@ -1,0 +1,29 @@
+{
+  "ahu1": [
+      {
+          "omit": [
+              "FaultConditionSix"
+          ],
+          "device": "1100",
+          "topic": "slipstream_internal/slipstream_hq",
+          "variables": [
+              {
+                  "duct_static_setpoint": "Duct Static Pressure Setpoint Active",
+                  "duct_static": "Duct Static Pressure Local",
+                  "vfd_speed": "Supply Fan Speed Command",
+                  "cooling_valve": "Cooling Capacity Status",
+                  "heating_valve": "Outdoor Air Damper Command",
+                  "mixing_dampers": "supply_air_volume",
+                  "supply_air_volume": "Duct Static Pressure Local",
+                  "supply_air_pressure": "Duct Static Pressure Setpoint BAS",
+                  "supply_air_pressure_setpoint": "Supply Air Temperature Local",
+                  "supply_air_temp": "Discharge Air Temperature Setpoint Active",
+                  "supply_air_temp_setpoint": "Mixed Air Temperature Local",
+                  "mixing_air_temp": "Mixed Air Temperature Local",
+                  "outdoor_air_temp": "Outdoor Air Temperature BAS"
+              }
+          ],
+          "custom_parameters": []
+      }
+  ]
+}
