@@ -20,7 +20,8 @@
                   "supply_air_temp": "Discharge Air Temperature Setpoint Active",
                   "supply_air_temp_setpoint": "Mixed Air Temperature Local",
                   "mixing_air_temp": "Mixed Air Temperature Local",
-                  "outdoor_air_temp": "Outdoor Air Temperature BAS"
+                  "outdoor_air_temp": "Outdoor Air Temperature BAS",
+                  "return_air_temp": "Return Air Temperature"
               }
           ],
           "custom_parameters": []

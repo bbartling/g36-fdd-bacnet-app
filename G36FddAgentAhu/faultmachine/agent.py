@@ -13,7 +13,7 @@ from volttron.platform.agent import utils
 from volttron.platform.vip.agent import Agent, Core, RPC
 from volttron.platform.messaging import topics, headers
 
-from faultmachine import FaultConditionOne
+from faultmachine import FaultConditionOne, FaultConditionTwo
 
 _log = logging.getLogger(__name__)
 utils.setup_logging()
@@ -75,6 +75,11 @@ class Faultmachine(Agent):
         self.duct_static_inches_err_thres = 0.99
         self.vfd_speed_percent_max = 0.1
 
+        # G36 default FC2 params
+        self.mix_degf_err_thres = 5.0
+        self.return_degf_err_thres = 5.0
+        self.outdoor_degf_err_thres = 2.0
+
     def configure(self, config_name, action, contents):
         """
         Called after the Agent has connected to the message bus. If a configuration exists at startup
@@ -86,7 +91,7 @@ class Faultmachine(Agent):
         config.update(contents)
 
         _log.info("[G36 Agent INFO] - Configuring Agent")
-        
+
         device_num_init = 0
         device_num = device_num_init
 
@@ -94,8 +99,8 @@ class Faultmachine(Agent):
             _log.info(f"[G36 Agent INFO] - {config}")
 
             for ahu, device_attributes in config.items():
-                #_log.info(f"device: {device}")
-                #_log.info(f"device_attributes: {device_attributes}")
+                # _log.info(f"device: {device}")
+                # _log.info(f"device_attributes: {device_attributes}")
 
                 device_num = AhuSystem()
                 self.ahus_as_a_class.append(device_num)
@@ -107,10 +112,21 @@ class Faultmachine(Agent):
                 for variable, point_name in variables[0].items():
                     setattr(device_num, variable, point_name)
 
-                # create empty list in the class and append new data from info on msg bus
+                # create empty lists in the class
+                # and append new data from info on msg bus
+                
+                # fc 1 equation input
                 setattr(device_num, "duct_static_setpoint_data", list())
                 setattr(device_num, "duct_static_data", list())
                 setattr(device_num, "vfd_speed_data", list())
+                
+                # fc 1 equation input
+                setattr(device_num, "mixing_air_temp_data", list())
+                setattr(device_num, "outdoor_air_temp_data", list())
+                setattr(device_num, "return_air_temp_data", list())
+                
+                
+                '''
                 setattr(device_num, "cooling_valve_data", list())
                 setattr(device_num, "heating_valve_data", list())
                 setattr(device_num, "mixing_dampers_data", list())
@@ -119,8 +135,8 @@ class Faultmachine(Agent):
                 setattr(device_num, "supply_air_pressure_setpoint_data", list())
                 setattr(device_num, "supply_air_temp_data", list())
                 setattr(device_num, "supply_air_temp_setpoint_data", list())
-                setattr(device_num, "mixing_air_temp_data", list())
-                setattr(device_num, "outdoor_air_temp_data", list())
+                '''
+
 
                 _log.info(f"[G36 Agent INFO] - Configs Set Success for {ahu}")
 
@@ -133,10 +149,12 @@ class Faultmachine(Agent):
                     prefix=subscription_prefix,
                     callback=self._handle_publish,
                 )
-                
+
                 device_num_init += 1
 
-                _log.info(f"[G36 Agent INFO] - Subscribition Success on device: {device}!!")
+                _log.info(
+                    f"[G36 Agent INFO] - Subscribition Success on device: {device}!!"
+                )
 
         except ValueError as e:
             _log.error(
@@ -145,7 +163,6 @@ class Faultmachine(Agent):
             return
 
         _log.info("[G36 Agent INFO] - ALL Subscribition Success!!")
-
 
     def _create_subscriptions(self, topics):
         """
@@ -193,29 +210,47 @@ class Faultmachine(Agent):
             _log.info(f"[G36 Agent INFO] - AHU Fan VFD Speed is: {vfd_speed_}")
             getattr(ahu, "vfd_speed_data").append(vfd_speed_)
 
+            # append value for the outdoor temp
+            outdoor_air_temp_ = message[0].get(getattr(ahu, "outdoor_air_temp"))
+            _log.info(f"[G36 Agent INFO] - Outside Air Temp is: {outdoor_air_temp_}")
+            getattr(ahu, "outdoor_air_temp_data").append(outdoor_air_temp_)
+
+            # append value for the return air temp
+            return_air_temp_ = message[0].get(getattr(ahu, "return_air_temp"))
+            _log.info(f"[G36 Agent INFO] - Return Air Temp is: {return_air_temp_}")
+            getattr(ahu, "return_air_temp_data").append(return_air_temp_)
+
+            # append value for the supply air temp
+            mixing_air_temp_ = message[0].get(getattr(ahu, "mixing_air_temp"))
+            _log.info(f"[G36 Agent INFO] - Supply Air Temp is: {mixing_air_temp_}")
+            getattr(ahu, "mixing_air_temp_data").append(mixing_air_temp_)
+
             # pass this class to see if enough data to calc rolling avg
-            '''
+            """
             TODO implement if else for each fc equation and a pass if its
             not inside the config OMIT
-            '''
+            """
+            
             self.fault_checker_fc1(ahu)
+            self.fault_checker_fc2(ahu)
             
             # future all the way up to fc 13
-            #self.fault_checker_fc2(ahu)
-            #self.fault_checker_fc3(ahu)
-            #self.fault_checker_fc4(ahu)
-            #self.fault_checker_fc5(ahu)
-            #self.fault_checker_fc6(ahu)
-            #self.fault_checker_fc7(ahu)
+            # self.fault_checker_fc3(ahu)
+            # self.fault_checker_fc4(ahu)
+            # self.fault_checker_fc5(ahu)
+            # self.fault_checker_fc6(ahu)
+            # self.fault_checker_fc7(ahu)
 
     def fault_checker_fc1(self, ahu):
-        len_of_list = len(getattr(ahu, "duct_static_setpoint_data"))
+        len_of_list_fc1 = len(getattr(ahu, "duct_static_setpoint_data"))
 
-        _log.info(f"[G36 Agent INFO] - fault_checker GO! on: {ahu} is {len_of_list}")
+        _log.info(
+            f"[G36 Agent INFO] - fc1 on {ahu} list len check is {len_of_list_fc1}"
+        )
 
-        if len_of_list < 5:
+        if len_of_list_fc1 < 5:
             _log.info(
-                f"[G36 Agent INFO] - Not enough accumilated data to run fault checker"
+                f"[G36 Agent INFO] - Not enough accumilated data to run fc1 fault checker"
             )
             return
 
@@ -228,10 +263,10 @@ class Faultmachine(Agent):
 
             df = pd.DataFrame(data)
 
-            _log.info(f"[G36 Agent INFO] - NOT rolling df is {df}")
+            _log.info(f"[G36 Agent INFO] - NOT rolling fc1 df is {df}")
 
             df = df.rolling(window=5).mean().dropna()
-            _log.info(f"[G36 Agent INFO] - rolling df is {df}")
+            _log.info(f"[G36 Agent INFO] - rolling fc1 df is {df}")
 
             _fc1 = FaultConditionOne(
                 self.vfd_speed_percent_err_thres,
@@ -248,10 +283,75 @@ class Faultmachine(Agent):
             # Int of one is Fault and zero for no fault
             fc1_fault = df2.at[df2.index[-1], "fc1_flag"]
 
-            _log.info(f"[G36 Agent INFO] - fault_condition_one is {fc1_fault}")
+            _log.info(f"[G36 Agent INFO] - fault_checker_fc1 is {fc1_fault}")
 
             getattr(ahu, "duct_static_setpoint_data").clear()
             getattr(ahu, "duct_static_data").clear()
+            
+            #getattr(ahu, "vfd_speed_data").clear()
+
+            """
+            #publish to message bus
+            self.vip.pubsub.publish(
+                peer="pubsub",
+                topic=f"analysis",
+                headers={
+                    headers.TIMESTAMP: utils.format_timestamp(utils.get_aware_utc_now())
+                },
+                message=f"FAULTS_FC1/{self.ahu_instance_id}/{int(fdd_check)}",
+            )
+            """
+
+    def fault_checker_fc2(self, ahu):
+
+        len_of_list_fc2 = len(getattr(ahu, "mixing_air_temp_data"))
+
+        _log.info(
+            f"[G36 Agent INFO] - fc2 on {ahu} list len check is {len_of_list_fc2}"
+        )
+
+        if len_of_list_fc2 < 5:
+            _log.info(
+                f"[G36 Agent INFO] - Not enough accumilated data to run fc2 fault checker"
+            )
+            return
+
+        else:
+            data = {
+                "outdoor_air_temp": getattr(ahu, "outdoor_air_temp_data"),
+                "return_air_temp": getattr(ahu, "return_air_temp_data"),
+                "mixing_air_temp": getattr(ahu, "mixing_air_temp_data"),
+                "supply_vfd_speed": getattr(ahu, "vfd_speed_data"),
+            }
+
+            df = pd.DataFrame(data)
+
+            _log.info(f"[G36 Agent INFO] - NOT rolling fc2 df is {df}")
+
+            df = df.rolling(window=5).mean().dropna()
+            _log.info(f"[G36 Agent INFO] - rolling fc2 df is {df}")
+
+            _fc2 = FaultConditionTwo(
+                self.mix_degf_err_thres,
+                self.return_degf_err_thres,
+                self.outdoor_degf_err_thres,
+                "mat",
+                "rat",
+                "oat",
+                "supply_vfd_speed",
+            )
+
+            df2 = _fc2.apply(df)
+
+            # Pandas df access the fault element in the last row
+            # Int of one is Fault and zero for no fault
+            fc2_fault = df2.at[df2.index[-1], "fc2_flag"]
+
+            _log.info(f"[G36 Agent INFO] - fault_checker_fc2 is {fc2_fault}")
+
+            getattr(ahu, "outdoor_air_temp_data").clear()
+            getattr(ahu, "return_air_temp_data").clear()
+            getattr(ahu, "mixing_air_temp_data").clear()
             getattr(ahu, "vfd_speed_data").clear()
 
             """
