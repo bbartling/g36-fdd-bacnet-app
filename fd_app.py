@@ -36,9 +36,60 @@ class FaultTasker(RecurringTask):
         """
         RecurringTask.__init__(self, interval * 1000)
         self.interval = interval
+        self.fc1_fault_last_value = "inactive"
         self.last_scan = datetime.now()
         self.fc = FaultChecker()
 
+
+    def process_task(self):
+        """
+        Run fault detection.
+        """
+        self.fc.pressure_data_storage.append(pressure_input_av.presentValue)
+        self.fc.pressure_sp_data_storage.append(pressure_setpoint_input_av.presentValue)
+        self.fc.motor_speed_data_storage.append(fan_speed_input_av.presentValue)
+        
+        _now = datetime.now()
+        last_scan_calc = abs(self.last_scan - _now).total_seconds()
+        print(f"LAST SCAN CALC SECONDS is: {last_scan_calc}")
+
+        # run G36 faults every 5 minutes
+        if last_scan_calc < 300.0:
+            return
+        
+        else:
+            try:
+                fc1_fault = self.fc.check_fc1()
+                
+                # G36 FAULT LOGIC 
+                if fc1_fault:
+                    # change value of BV point
+                    if self.fc1_fault_last_value == "inactive":
+                        fault_output_bv.presentValue = "active"
+                        self.fc1_fault_last_value = "active"
+                        print(f'FC1 flag set to active!')
+                else:
+                    # change value of BV point
+                    if self.fc1_fault_last_value == "active":
+                        fault_output_bv.presentValue = "inactive"
+                        self.fc1_fault_last_value = "inactive"
+                        print(f'FC1 flag set to inactive!')
+            except Exception as e:
+                print(f'Error on FC1 check! - {e}')
+        
+            self.last_scan = datetime.now()
+
+        
+class FaultChecker():
+    def __init__(self):
+
+        # static pressure input data
+        self.pressure_data_storage = []
+        # static pressure setpoint input data
+        self.pressure_sp_data_storage = []
+        # supply fan vfd speed input data
+        self.motor_speed_data_storage = []
+        
     def calc_mean(self, list_data):
         """
         Calculate the mean of a list of numbers.
@@ -53,112 +104,32 @@ class FaultTasker(RecurringTask):
             return 0
         else:
             return sum(list_data) / len(list_data)
-
-    def process_task(self):
-        """
-        Run fault detection.
-        """
-        self.fc.sap_point_data_storage.append(pressure_input_av.presentValue)
-        self.fc.sap_sp_point_data_storage.append(pressure_setpoint_input_av.presentValue)
-        self.fc.sfo_point_data_storage.append(fan_speed_input_av.presentValue)
         
-        _now = datetime.now()
-        last_scan_calc = abs(self.last_scan - _now).total_seconds()
-        print(f"LAST SCAN CALC SECONDS is: {last_scan_calc}")
-
-        # run G36 faults every 5 minutes
-        if last_scan_calc < 300.0:
-            return
         
-        else:
-            fc1_fault = self.fc.fault_checker()
-            
-            # G36 FAULT LOGIC 
-            if fc1_fault:
-                # change value of BV point
-                if self.fc1_fd_lv == "inactive":
-                    fault_output_bv.presentValue = "active"
-                    self.fc1_fd_lv = "active"
-                    print(f'FC1 flag set to active!')
-            else:
-                # change value of BV point
-                if self.fc1_fd_lv == "active":
-                    fault_output_bv.presentValue = "inactive"
-                    self.fc1_fd_lv = "inactive"
-                    print(f'FC1 flag set to inactive!')
-        
-            self.last_scan = datetime.now()
-
-        
-class FaultChecker():
-    def __init__(self):
-        self.fc1_fd_lv = "inactive"
-        
-        # static pressure input
-        self.sap_point_data_storage = []
-        # static pressure setpoint input
-        self.sap_sp_point_data_storage = []
-        # supply fan vfd speed input
-        self.sfo_point_data_storage = []
-        
-    def fault_checker(self):
-        print(f'run_fault_rules ran!')
-        
-        sap_mean_calc = self.calc_mean(self.sap_point_data_storage)
-        print(f'Supply Air Duct Static Pressure: {sap_mean_calc}')
-        
-        sap_sp_mean_calc = self.calc_mean(self.sap_sp_point_data_storage)
+    def check_fc1(self):
+        pressure_mean = self.calc_mean(self.pressure_data_storage)
+        print(f'Supply Air Duct Static Pressure: {pressure_mean}')
+        sap_sp_mean_calc = self.calc_mean(self.pressure_sp_data_storage)
         print(f'Supply Air Duct Static Pressure Setpoint: {sap_sp_mean_calc}')
+        motor_speed_mean = self.calc_mean(self.motor_speed_data_storage)
+        print(f'Supply Fan Mean Speed Output: {motor_speed_mean}')
         
-        sfo_mean_calc = self.calc_mean(self.sfo_point_data_storage)
-        print(f'Supply Fan Mean Speed Output: {sfo_mean_calc}')
-        
-        self.sap_point_data_storage.clear()
-        self.sap_sp_point_data_storage.clear()
-        self.sfo_point_data_storage.clear()
-        print(f'Storage Clear Success!')
-        
-        fc1_fault = self.run_fc1(
-            vfd_err_thres.presentValue,
-            vfd_max_speed_thres.presentValue,
-            static_press_err_thres.presentValue,
-            sap_mean_calc,
-            sap_sp_mean_calc,
-            sfo_mean_calc
-        )
-        
-        print(f'FC1 flag is {fc1_fault}')
-        return fc1_fault
+        self.pressure_data_storage.clear()
+        self.pressure_sp_data_storage.clear()
+        self.motor_speed_data_storage.clear()
 
+        pressure_check = pressure_mean < sap_sp_mean_calc - \
+            static_press_err_thres.presentValue
+        print(f'pressure_check is {pressure_check}')
         
-    # G36 Fault Condition One
-    def run_fc1(        
-        self,
-        vfd_err_thres,
-        vfd_max_speed_thres,
-        static_press_err_thres,
-        sap_mean_calc,
-        sap_sp_mean_calc,
-        sfo_mean_calc
-    ):
-        
-        print(f'sap_mean_calc is {sap_mean_calc}')
-        print(f'sap_sp_mean_calc is {sap_sp_mean_calc}')
-        print(f'sfo_mean_calc is {sfo_mean_calc}')
-        
-        static_check_boolean = (sap_mean_calc < sap_sp_mean_calc - static_press_err_thres)
-        print(f'static_check_boolean is {static_check_boolean}')
-        
-        fan_check_boolean = (sfo_mean_calc >= vfd_max_speed_thres - vfd_err_thres)
-        print(f'fan_check_boolean is {fan_check_boolean}')
-        
-        if (static_check_boolean and fan_check_boolean):
-            return True
-        else:
-            return False
-        
+        fan_check = motor_speed_mean >= vfd_max_speed_thres.presentValue - \
+            vfd_err_thres.presentValue
+        print(f'fan_check is {fan_check}')
 
-
+        # return True if both checks are true, 
+        # indicating a fault has occurred, and False otherwise
+        return pressure_check and fan_check
+        
 
 def main():
     global pressure_input_av, pressure_setpoint_input_av, fan_speed_input_av, \
