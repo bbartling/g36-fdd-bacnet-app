@@ -7,6 +7,7 @@ ASHRAE G36 for a VAV AHU
 
 # Standard library imports
 from datetime import datetime
+from collections import deque
 
 # Third-party library imports
 from bacpypes.consolelogging import ConfigArgumentParser
@@ -17,7 +18,7 @@ from bacpypes.object import BinaryValueObject, register_object_type
 from bacpypes.local.device import LocalDeviceObject
 from bacpypes.local.object import AnalogValueCmdObject
 
-# Constant in seconds for data scrape
+# Constants
 INTERVAL = 1.0
 
 # Register object type
@@ -83,9 +84,9 @@ class FaultTasker(RecurringTask):
 
 class FaultDetector:
     def __init__(self):
-        self.pressure_data_storage = []
-        self.setpoint_data_storage = []
-        self.motor_speed_data_storage = []
+        self.pressure_data_storage = deque(maxlen=1000)
+        self.setpoint_data_storage = deque(maxlen=1000)
+        self.motor_speed_data_storage = deque(maxlen=1000)
 
     def get_data(self):
         pressure_data = self.pressure_data_storage[-300:]
