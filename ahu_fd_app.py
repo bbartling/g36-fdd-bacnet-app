@@ -17,7 +17,7 @@ from bacpypes.object import BinaryValueObject, register_object_type
 from bacpypes.local.device import LocalDeviceObject
 from bacpypes.local.object import AnalogValueCmdObject
 
-# Constants
+# Constant in seconds for data scrape
 INTERVAL = 1.0
 
 # Register object type
@@ -36,18 +36,18 @@ class FaultTasker(RecurringTask):
         """
         RecurringTask.__init__(self, interval * 1000)
         self.interval = interval
-        self.fc1_fault_last_value = "inactive"
+        self.fd1_fault_last_value = "inactive"
         self.last_scan = datetime.now()
-        self.fc = FaultChecker()
+        self.fd = FaultDetector()
 
 
     def process_task(self):
         """
         Run fault detection.
         """
-        self.fc.pressure_data_storage.append(pressure_input_av.presentValue)
-        self.fc.pressure_sp_data_storage.append(pressure_setpoint_input_av.presentValue)
-        self.fc.motor_speed_data_storage.append(fan_speed_input_av.presentValue)
+        self.fd.pressure_data_storage.append(pressure_input_av.presentValue)
+        self.fd.setpoint_data_storage.append(pressure_setpoint_input_av.presentValue)
+        self.fd.motor_speed_data_storage.append(fan_speed_input_av.presentValue)
         
         _now = datetime.now()
         last_scan_calc = abs(self.last_scan - _now).total_seconds()
@@ -59,20 +59,20 @@ class FaultTasker(RecurringTask):
         
         else:
             try:
-                fc1_fault = self.fc.check_fc1()
+                fc1_fault = self.fd.fault_check_condition_one()
                 
                 # G36 FAULT LOGIC 
                 if fc1_fault:
                     # change value of BV point
-                    if self.fc1_fault_last_value == "inactive":
+                    if self.fd1_fault_last_value == "inactive":
                         fault_output_bv.presentValue = "active"
-                        self.fc1_fault_last_value = "active"
+                        self.fd1_fault_last_value = "active"
                         print(f'FC1 flag set to active!')
                 else:
                     # change value of BV point
-                    if self.fc1_fault_last_value == "active":
+                    if self.fd1_fault_last_value == "active":
                         fault_output_bv.presentValue = "inactive"
-                        self.fc1_fault_last_value = "inactive"
+                        self.fd1_fault_last_value = "inactive"
                         print(f'FC1 flag set to inactive!')
             except Exception as e:
                 print(f'Error on FC1 check! - {e}')
@@ -80,55 +80,34 @@ class FaultTasker(RecurringTask):
             self.last_scan = datetime.now()
 
         
-class FaultChecker():
+
+class FaultDetector:
     def __init__(self):
-
-        # static pressure input data
         self.pressure_data_storage = []
-        # static pressure setpoint input data
-        self.pressure_sp_data_storage = []
-        # supply fan vfd speed input data
+        self.setpoint_data_storage = []
         self.motor_speed_data_storage = []
-        
-    def calc_mean(self, list_data):
-        """
-        Calculate the mean of a list of numbers.
 
-        Args:
-            list_data (list): A list of numbers.
+    def get_data(self):
+        pressure_data = self.pressure_data_storage[-300:]
+        setpoint_data = self.setpoint_data_storage[-300:]
+        motor_speed_data = self.motor_speed_data_storage[-300:]
+        return pressure_data, setpoint_data, motor_speed_data
 
-        Returns:
-            float: The mean of the list.
-        """
-        if len(list_data) == 0:
-            return 0
-        else:
-            return sum(list_data) / len(list_data)
-        
-        
-    def check_fc1(self):
-        pressure_mean = self.calc_mean(self.pressure_data_storage)
-        print(f'Supply Air Duct Static Pressure: {pressure_mean}')
-        sap_sp_mean_calc = self.calc_mean(self.pressure_sp_data_storage)
-        print(f'Supply Air Duct Static Pressure Setpoint: {sap_sp_mean_calc}')
-        motor_speed_mean = self.calc_mean(self.motor_speed_data_storage)
-        print(f'Supply Fan Mean Speed Output: {motor_speed_mean}')
-        
-        self.pressure_data_storage.clear()
-        self.pressure_sp_data_storage.clear()
-        self.motor_speed_data_storage.clear()
+    def pressure_check(self):
+        pressure_data, setpoint_data, _ = self.get_data()
+        pressure_mean = sum(pressure_data) / len(pressure_data)
+        setpoint_mean = sum(setpoint_data) / len(setpoint_data)
+        return pressure_mean < (setpoint_mean - static_press_err_thres.presentValue)
 
-        pressure_check = pressure_mean < sap_sp_mean_calc - \
-            static_press_err_thres.presentValue
-        print(f'pressure_check is {pressure_check}')
-        
-        fan_check = motor_speed_mean >= vfd_max_speed_thres.presentValue - \
-            vfd_err_thres.presentValue
-        print(f'fan_check is {fan_check}')
+    def fan_check(self):
+        _, _, motor_speed_data = self.get_data()
+        motor_speed_mean = sum(motor_speed_data) / len(motor_speed_data)
+        return motor_speed_mean >= (vfd_max_speed_thres.presentValue - vfd_err_thres.presentValue)
 
-        # return True if both checks are true, 
-        # indicating a fault has occurred, and False otherwise
-        return pressure_check and fan_check
+    def fault_check_condition_one(self):
+        if len(self.pressure_data_storage) < 300:
+            return False
+        return self.pressure_check() and self.fan_check()
         
 
 def main():
