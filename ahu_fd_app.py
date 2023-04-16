@@ -7,7 +7,6 @@ ASHRAE G36 for a VAV AHU
 
 # Standard library imports
 from datetime import datetime
-from collections import deque
 
 # Third-party library imports
 from bacpypes.consolelogging import ConfigArgumentParser
@@ -24,10 +23,12 @@ INTERVAL = 1.0
 # Register object type
 register_object_type(AnalogValueCmdObject, vendor_id=999)
 
+
 class FaultTasker(RecurringTask):
     """
     A recurring task that runs fault detection every INTERVAL seconds.
     """
+
     def __init__(self, interval):
         """
         Initialize the FaultTasker.
@@ -41,7 +42,6 @@ class FaultTasker(RecurringTask):
         self.last_scan = datetime.now()
         self.fd = FaultDetector()
 
-
     def process_task(self):
         """
         Run fault detection.
@@ -49,7 +49,7 @@ class FaultTasker(RecurringTask):
         self.fd.pressure_data_storage.append(pressure_input_av.presentValue)
         self.fd.setpoint_data_storage.append(pressure_setpoint_input_av.presentValue)
         self.fd.motor_speed_data_storage.append(fan_speed_input_av.presentValue)
-        
+
         _now = datetime.now()
         last_scan_calc = abs(self.last_scan - _now).total_seconds()
         print(f"LAST SCAN CALC SECONDS is: {last_scan_calc}")
@@ -57,64 +57,78 @@ class FaultTasker(RecurringTask):
         # run G36 faults every 5 minutes
         if last_scan_calc < 300.0:
             return
-        
+
         else:
             try:
                 fc1_fault = self.fd.fault_check_condition_one()
-                
-                # G36 FAULT LOGIC 
+
+                # G36 FAULT LOGIC
                 if fc1_fault:
                     # change value of BV point
                     if self.fd1_fault_last_value == "inactive":
                         fault_output_bv.presentValue = "active"
                         self.fd1_fault_last_value = "active"
-                        print(f'FC1 flag set to active!')
+                        print(f"FC1 flag set to active!")
                 else:
                     # change value of BV point
                     if self.fd1_fault_last_value == "active":
                         fault_output_bv.presentValue = "inactive"
                         self.fd1_fault_last_value = "inactive"
-                        print(f'FC1 flag set to inactive!')
+                        print(f"FC1 flag set to inactive!")
             except Exception as e:
-                print(f'Error on FC1 check! - {e}')
-        
+                print(f"Error on FC1 check! - {e}")
+
             self.last_scan = datetime.now()
 
-        
 
 class FaultDetector:
     def __init__(self):
-        self.pressure_data_storage = deque(maxlen=1000)
-        self.setpoint_data_storage = deque(maxlen=1000)
-        self.motor_speed_data_storage = deque(maxlen=1000)
+        self.pressure_data_storage = []
+        self.setpoint_data_storage = []
+        self.motor_speed_data_storage = []
 
     def get_data(self):
-        pressure_data = self.pressure_data_storage[-300:]
-        setpoint_data = self.setpoint_data_storage[-300:]
-        motor_speed_data = self.motor_speed_data_storage[-300:]
+        pressure_data = self.pressure_data_storage
+        setpoint_data = self.setpoint_data_storage
+        motor_speed_data = self.motor_speed_data_storage
         return pressure_data, setpoint_data, motor_speed_data
+
+    def clear_fc1_data_containers(self):
+        self.pressure_data_storage.clear()
+        self.setpoint_data_storage.clear()
+        self.motor_speed_data_storage.clear()
+        print("clear_fc1_data_containers clear sucess!")
 
     def pressure_check(self):
         pressure_data, setpoint_data, _ = self.get_data()
-        pressure_mean = sum(pressure_data) / len(pressure_data)
-        setpoint_mean = sum(setpoint_data) / len(setpoint_data)
+        if len(pressure_data) == 0 or len(setpoint_data) == 0:
+            return False
+        pressure_mean = sum(pressure_data) / len(pressure_data) if len(pressure_data) > 0 else 0
+        setpoint_mean = sum(setpoint_data) / len(setpoint_data) if len(setpoint_data) > 0 else 0
         return pressure_mean < (setpoint_mean - static_press_err_thres.presentValue)
 
     def fan_check(self):
         _, _, motor_speed_data = self.get_data()
+        if len(motor_speed_data) == 0:
+            return False
         motor_speed_mean = sum(motor_speed_data) / len(motor_speed_data)
         return motor_speed_mean >= (vfd_max_speed_thres.presentValue - vfd_err_thres.presentValue)
 
     def fault_check_condition_one(self):
-        if len(self.pressure_data_storage) < 300:
+        if len(self.pressure_data_storage) < 5:
+            print("Not enough data to run faults yet", len(self.pressure_data_storage))
             return False
-        return self.pressure_check() and self.fan_check()
-        
+
+        checks = self.pressure_check() and self.fan_check()
+        self.clear_fc1_data_containers()
+        print(
+            f"FC1 all checks is {checks} pressure check is {self.pressure_check()} fan check is {self.fan_check()}"
+        )
+        return checks
+
 
 def main():
-    global pressure_input_av, pressure_setpoint_input_av, fan_speed_input_av, \
-        fault_output_bv, fault_detector_application, vfd_err_thres, \
-        vfd_max_speed_thres, static_press_err_thres
+    global pressure_input_av, pressure_setpoint_input_av, fan_speed_input_av, fault_output_bv, fault_detector_application, vfd_err_thres, vfd_max_speed_thres, static_press_err_thres
 
     # make a parser
     parser = ConfigArgumentParser(description=__doc__)
@@ -151,7 +165,7 @@ def main():
 
     # add it to the device
     fault_detector_application.add_object(vfd_max_speed_thres)
-    
+
     # make an analog value object
     static_press_err_thres = AnalogValueCmdObject(
         objectIdentifier=("analogValue", 3),
@@ -175,7 +189,7 @@ def main():
 
     # add it to the device
     fault_detector_application.add_object(pressure_input_av)
-    
+
     # make an analog value object
     pressure_setpoint_input_av = AnalogValueCmdObject(
         objectIdentifier=("analogValue", 5),
@@ -187,7 +201,7 @@ def main():
 
     # add it to the device
     fault_detector_application.add_object(pressure_setpoint_input_av)
-    
+
     # make an analog value object
     fan_speed_input_av = AnalogValueCmdObject(
         objectIdentifier=("analogValue", 6),
@@ -199,7 +213,7 @@ def main():
 
     # add it to the device
     fault_detector_application.add_object(fan_speed_input_av)
-    
+
     # make a binary value object
     fault_output_bv = BinaryValueObject(
         objectIdentifier=("binaryValue", 7),
@@ -214,11 +228,9 @@ def main():
     # binary value task
     do_something_task = FaultTasker(INTERVAL)
     do_something_task.install_task()
-    
 
     run()
 
 
 if __name__ == "__main__":
     main()
-
