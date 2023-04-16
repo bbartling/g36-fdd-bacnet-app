@@ -8,6 +8,15 @@ then represent faults as BACnet objects that can be trended/alarmed on the BAS.
 * Boiler Plant - still to come
 * Chiller Plant - still to come
 
+### Install bacpypes:
+`$ pip install bacpypes`
+
+* Modify the `bacpypes.ini` for your devices IP address
+
+### Tested on Ubuntu LTS 22.04 Python 3.10, run app:
+`$ python ahu_fd_app.py`
+
+
 
 
 
