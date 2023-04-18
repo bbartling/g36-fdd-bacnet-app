@@ -19,7 +19,6 @@ from bacpypes.app import BIPSimpleApplication
 from bacpypes.object import BinaryValueObject, register_object_type
 from bacpypes.local.device import LocalDeviceObject
 from bacpypes.local.object import AnalogValueCmdObject
-import queue
 
 # Constants
 INTERVAL = 1.0
@@ -68,8 +67,10 @@ class FaultTasker(RecurringTask):
             return
 
         else:
+            
             try:
                 fc1_fault = self.fd.fault_check_condition_one()
+                print(f"fc1_fault is {fc1_fault}")
 
                 # G36 FAULT LOGIC
                 if fc1_fault:
