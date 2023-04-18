@@ -8,6 +8,9 @@ ASHRAE G36 for a VAV AHU
 # Standard library imports
 from datetime import datetime
 
+# Import fault logic
+from faults import FaultDetector
+
 # Third-party library imports
 from bacpypes.consolelogging import ConfigArgumentParser
 from bacpypes.core import run
@@ -16,9 +19,11 @@ from bacpypes.app import BIPSimpleApplication
 from bacpypes.object import BinaryValueObject, register_object_type
 from bacpypes.local.device import LocalDeviceObject
 from bacpypes.local.object import AnalogValueCmdObject
+import queue
 
 # Constants
 INTERVAL = 1.0
+
 
 # Register object type
 register_object_type(AnalogValueCmdObject, vendor_id=999)
@@ -46,9 +51,13 @@ class FaultTasker(RecurringTask):
         """
         Run fault detection.
         """
-        self.fd.pressure_data_storage.append(pressure_input_av.presentValue)
-        self.fd.setpoint_data_storage.append(pressure_setpoint_input_av.presentValue)
-        self.fd.motor_speed_data_storage.append(fan_speed_input_av.presentValue)
+        self.fd.pressure_data_storage.put(pressure_input_av.presentValue)
+        self.fd.setpoint_data_storage.put(pressure_setpoint_input_av.presentValue)
+        self.fd.motor_speed_data_storage.put(fan_speed_input_av.presentValue)
+
+        self.fd.vfd_err_thres = vfd_err_thres.presentValue
+        self.fd.vfd_max_speed_thres = vfd_max_speed_thres.presentValue
+        self.fd.static_press_err_thres = static_press_err_thres.presentValue
 
         _now = datetime.now()
         last_scan_calc = abs(self.last_scan - _now).total_seconds()
@@ -81,54 +90,11 @@ class FaultTasker(RecurringTask):
             self.last_scan = datetime.now()
 
 
-class FaultDetector:
-    def __init__(self):
-        self.pressure_data_storage = []
-        self.setpoint_data_storage = []
-        self.motor_speed_data_storage = []
-
-    def get_data(self):
-        pressure_data = self.pressure_data_storage
-        setpoint_data = self.setpoint_data_storage
-        motor_speed_data = self.motor_speed_data_storage
-        return pressure_data, setpoint_data, motor_speed_data
-
-    def clear_fc1_data_containers(self):
-        self.pressure_data_storage.clear()
-        self.setpoint_data_storage.clear()
-        self.motor_speed_data_storage.clear()
-        print("clear_fc1_data_containers clear sucess!")
-
-    def pressure_check(self):
-        pressure_data, setpoint_data, _ = self.get_data()
-        if len(pressure_data) == 0 or len(setpoint_data) == 0:
-            return False
-        pressure_mean = sum(pressure_data) / len(pressure_data) if len(pressure_data) > 0 else 0
-        setpoint_mean = sum(setpoint_data) / len(setpoint_data) if len(setpoint_data) > 0 else 0
-        return pressure_mean < (setpoint_mean - static_press_err_thres.presentValue)
-
-    def fan_check(self):
-        _, _, motor_speed_data = self.get_data()
-        if len(motor_speed_data) == 0:
-            return False
-        motor_speed_mean = sum(motor_speed_data) / len(motor_speed_data)
-        return motor_speed_mean >= (vfd_max_speed_thres.presentValue - vfd_err_thres.presentValue)
-
-    def fault_check_condition_one(self):
-        if len(self.pressure_data_storage) < 5:
-            print("Not enough data to run faults yet", len(self.pressure_data_storage))
-            return False
-
-        checks = self.pressure_check() and self.fan_check()
-        self.clear_fc1_data_containers()
-        print(
-            f"FC1 all checks is {checks} pressure check is {self.pressure_check()} fan check is {self.fan_check()}"
-        )
-        return checks
-
 
 def main():
-    global pressure_input_av, pressure_setpoint_input_av, fan_speed_input_av, fault_output_bv, fault_detector_application, vfd_err_thres, vfd_max_speed_thres, static_press_err_thres
+    global pressure_input_av, pressure_setpoint_input_av, fan_speed_input_av, \
+    fault_output_bv, fault_detector_application, vfd_err_thres, \
+    vfd_max_speed_thres, static_press_err_thres
 
     # make a parser
     parser = ConfigArgumentParser(description=__doc__)
@@ -225,7 +191,7 @@ def main():
     # add it to the device
     fault_detector_application.add_object(fault_output_bv)
 
-    # binary value task
+    # checks server for data
     do_something_task = FaultTasker(INTERVAL)
     do_something_task.install_task()
 
