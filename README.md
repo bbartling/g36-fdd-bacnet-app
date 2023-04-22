@@ -1,8 +1,6 @@
 ## Fault Detection BACnet Server App
 
-### Concept idea for HVAC fault detection in real time on the edge or OT LAN inside the building
-
-### Networking schematic
+### Concept idea for HVAC fault detection in real time on the edge or Operations Technology (OT) Local Area Network (LAN) inside the building:
 ![Alt text](/images/schematic.jpg)
 
 ### See subfolders for algorithm concept implementations based on these definitions:
