@@ -43,7 +43,6 @@ class FaultTasker(RecurringTask):
         self.fd = FaultDetector()
         self.device = device
         self.faults_to_check = [
-            "calc_fan_status",
             "fault_check_condition_one",
             "fault_check_condition_two",
             "fault_check_condition_three",
@@ -84,9 +83,21 @@ class FaultTasker(RecurringTask):
         _now = datetime.now()
         last_scan_calc = abs(self.last_scan - _now).total_seconds()
         print(f"LAST SCAN CALC SECONDS is: {last_scan_calc}")
-
+        
+        '''
         # run G36 faults every 5 minutes
         if last_scan_calc < 30.0:
+            return
+        
+        fault_condition = getattr(self.fd, "fault_check_condition_one")
+        in_fault = fault_condition()
+        
+        print(f"fault_check_condition_one is {in_fault}")
+        self.last_scan = datetime.now()
+        '''
+
+        # run G36 faults every 5 minutes
+        if last_scan_calc < 300.0:
             return
 
         else:
@@ -121,18 +132,22 @@ class FaultTasker(RecurringTask):
                     print(f"Error on {fault_rule} check! - {e}")
 
             self.last_scan = datetime.now()
-
+            
+    
 
 def main():
     app = BacnetApp()
+    
+    # BACnet discoverable points in app
+    # type, name, default value
     point_tuples_in_brick_format = [
-        ("analogValue", "fan_vfd_err_thres"),
-        ("analogValue", "fan_vfd_max_speed_err_thres"),
-        ("analogValue", "supply_air_static_pressure_err_thres"),
-        ("analogValue", "supply_air_static_pressure"),
-        ("analogValue", "supply_air_static_pressure_setpoint"),
-        ("analogValue", "fan_vfd"),
-        ("binaryValue", "fault_condition_one_alarm"),
+        ("analogValue", "fan-vfd-err-thres", 5.0, "Default is 5%"),
+        ("analogValue", "fan-vfd-max-speed-err-thres", 95.0, "Default is 95%"),
+        ("analogValue", "supply-air-static-pressure-err-thres", 0.1, "Default is 0.1 Inches WC. Use 25 for Pa."),
+        ("analogValue", "supply-air-static-pressure", 0.0, "Input for duct static pressure"),
+        ("analogValue", "supply-air-static-pressure-setpoint", 0.0, "Input for duct static presure setpoint"),
+        ("analogValue", "fan-vfd", 0.0, "Input for fan vfd speed in percent"),
+        ("binaryValue", "fault-condition-one-alarm", "inactive", "Supply fan is not meeting duct pressure setpoint"),
     ]
 
     app.make_app(point_tuples_in_brick_format)

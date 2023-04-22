@@ -14,7 +14,7 @@ then represent faults as BACnet objects that can be trended/alarmed on the BAS.
 * Modify the `bacpypes.ini` for your devices IP address
 
 ### Tested on Ubuntu LTS 22.04 Python 3.10, run app:
-`$ python ahu_fd_app.py`
+`$ python main.py`
 
 
 
