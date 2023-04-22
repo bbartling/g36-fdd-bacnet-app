@@ -1,7 +1,9 @@
 ## Fault Detection BACnet Server App
 
-### future concept idea for a BACnet device that BAS contractors can deploy that will collect HVAC IO data via supervisory level logic and 
-then represent faults as BACnet objects that can be trended/alarmed on the BAS.
+### Concept idea for HVAC fault detection in real time on the edge or OT LAN inside the building
+
+### Networking schematic
+![Alt text](/images/schematic.jpg)
 
 ### See subfolders for algorithm concept implementations based on these definitions:
 * [AHU](https://github.com/bbartling/open-fdd/tree/master/air_handling_unit/images)

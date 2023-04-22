@@ -139,7 +139,7 @@ def main():
     app = BacnetApp()
     
     # BACnet discoverable points in app
-    # type, name, default value
+    # TYPE, POINT NAME, DEFAULT PV, DESCRIPTION
     point_tuples_in_brick_format = [
         ("analogValue", "fan-vfd-err-thres", 5.0, "Default is 5%"),
         ("analogValue", "fan-vfd-max-speed-err-thres", 95.0, "Default is 95%"),

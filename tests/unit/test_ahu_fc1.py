@@ -32,7 +32,7 @@ def test_fault_check_condition_one_true(fault_detector):
 
 
 def test_fault_check_condition_one_false(fault_detector):
-    # blantently obvious fan in fault
+    # blantently obvious fan NOT in fault
     pressure_data = 0.99
     setpoint_data = 1.0
     motor_speed_data = 44.0
