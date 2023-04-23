@@ -39,6 +39,8 @@ class FaultTasker(RecurringTask):
         RecurringTask.__init__(self, interval * 1000)
         self.interval = interval
         self.fd1_fault_last_value = "inactive"
+        self.fd2_fault_last_value = "inactive"
+        
         self.last_scan = datetime.now()
         self.fd = FaultDetector()
         self.device = device
@@ -62,7 +64,7 @@ class FaultTasker(RecurringTask):
 
     def process_task(self):
         """
-        Run fault detection.
+        FC1
         """
         self.fd.supply_air_static_pressure_cache.put(
             self.device.supply_air_static_pressure_av.presentValue
@@ -79,13 +81,35 @@ class FaultTasker(RecurringTask):
         self.fd.supply_air_static_pressure_err_thres_pv = (
             self.device.supply_air_static_pressure_err_thres_av.presentValue
         )
+        
+        '''
+        FC2
+        '''
+        self.fd.return_air_temp_sensor_cache.put(
+            self.device.return_air_temp_sensor_av.presentValue
+        )
+        self.fd.mixed_air_temp_sensor_cache.put(
+            self.device.mixed_air_temp_sensor_av.presentValue
+        )
+        self.fd.outside_air_temp_sensor_cache.put(
+            self.device.outside_air_temp_sensor_av.presentValue
+        )
+
+        self.fd.mixed_air_temp_sensor_err_thres_pv = self.device.mixed_air_temp_sensor_err_thres_av.presentValue
+        self.fd.outside_air_temp_sensor_err_thres_pv = self.device.outside_air_temp_sensor_err_thres_av.presentValue
+        self.fd.return_air_temp_sensor_err_thres_pv = self.device.return_air_temp_sensor_err_thres_av.presentValue
+        
+        '''
+        FC3
+        '''
 
         _now = datetime.now()
         last_scan_calc = abs(self.last_scan - _now).total_seconds()
         print(f"LAST SCAN CALC SECONDS is: {last_scan_calc}")
         
         '''
-        # run G36 faults every 5 minutes
+        TODO implement a test mode variation to wait only 30 to run rules
+        # run G36 faults every 30 seconds for debug purposes
         if last_scan_calc < 30.0:
             return
         
@@ -128,6 +152,25 @@ class FaultTasker(RecurringTask):
                                 self.fd1_fault_last_value = "inactive"
                                 print(f"FC1 flag set to inactive!")
                                 
+                    elif fault_rule == "fault_check_condition_two":
+                        # G36 FAULT LOGIC
+                        if in_fault:
+                            # change value of BV point
+                            if self.fd2_fault_last_value == "inactive":
+                                self.device.fault_condition_two_alarm_bv.presentValue = (
+                                    "active"
+                                )
+                                self.fd2_fault_last_value = "active"
+                                print(f"FC2 flag set to active!")
+                        else:
+                            # change value of BV point
+                            if self.fd2_fault_last_value == "active":
+                                self.device.fault_condition_two_alarm_bv.presentValue = (
+                                    "inactive"
+                                )
+                                self.fd2_fault_last_value = "inactive"
+                                print(f"FC2 flag set to inactive!")
+                                
                 except Exception as e:
                     print(f"Error on {fault_rule} check! - {e}")
 
@@ -141,13 +184,27 @@ def main():
     # BACnet discoverable points in app
     # TYPE, POINT NAME, DEFAULT PV, DESCRIPTION
     point_tuples_in_brick_format = [
-        ("analogValue", "fan-vfd-err-thres", 5.0, "Default is 5%"),
-        ("analogValue", "fan-vfd-max-speed-err-thres", 95.0, "Default is 95%"),
+        
+        # tuning params
+        ("analogValue", "fan-vfd-err-thres", 5.0, "Default is 5% motor speed command"),
+        ("analogValue", "fan-vfd-max-speed-err-thres", 95.0, "Default is 95% motor speed command"),
         ("analogValue", "supply-air-static-pressure-err-thres", 0.1, "Default is 0.1 Inches WC. Use 25 for Pa."),
+        ("analogValue", "return-air-temp-sensor-err-thres", 2.0, "Default is 2 for °F. Use 1 for °C."),
+        ("analogValue", "mixed-air-temp-sensor-err-thres", 2.0, "Default is 2 for °F. Use 1 for °C."),
+        ("analogValue", "outside-air-temp-sensor-err-thres", 2.0, "Default is 2 for °F. Use 1 for °C."),
+        
+        # sensor input
         ("analogValue", "supply-air-static-pressure", 0.0, "Input for duct static pressure"),
         ("analogValue", "supply-air-static-pressure-setpoint", 0.0, "Input for duct static presure setpoint"),
         ("analogValue", "fan-vfd", 0.0, "Input for fan vfd speed in percent"),
+        ("analogValue", "return-air-temp-sensor", 0.0, "Input for return air temperature"),
+        ("analogValue", "mixed-air-temp-sensor", 0.0, "Input for mixed air temperature"),
+        ("analogValue", "outside-air-temp-sensor", 0.0, "Input for outside air temperature"),
+        
+        # fault alarm output
         ("binaryValue", "fault-condition-one-alarm", "inactive", "Supply fan is not meeting duct pressure setpoint"),
+        ("binaryValue", "fault-condition-two-alarm", "inactive", "Mix temp low; should be between out and return temp"),
+        
     ]
 
     app.make_app(point_tuples_in_brick_format)

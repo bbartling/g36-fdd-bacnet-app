@@ -46,3 +46,20 @@ def test_fault_check_condition_one_false(fault_detector):
     fault_detector.fan_vfd_cache.put(motor_speed_data)
 
     assert fault_detector.fault_check_condition_one() == False
+    
+    
+def test_fault_check_condition_one_false_fan_off(fault_detector):
+    # blantently obvious fan in fault but fan is off or vfd is zero
+    pressure_data = 0.4
+    setpoint_data = 1.0
+    motor_speed_data = 0.0
+    
+    fault_detector.fan_vfd_err_thres_pv = 5.0
+    fault_detector.fan_vfd_max_speed_err_thres_pv = 95.0
+    fault_detector.supply_air_static_pressure_err_thres_pv = 0.1
+
+    fault_detector.supply_air_static_pressure_cache.put(pressure_data)
+    fault_detector.supply_air_static_pressure_setpoint_cache.put(setpoint_data)
+    fault_detector.fan_vfd_cache.put(motor_speed_data)
+
+    assert fault_detector.fault_check_condition_one() == False
