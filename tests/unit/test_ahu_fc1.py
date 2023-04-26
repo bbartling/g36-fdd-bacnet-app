@@ -1,5 +1,5 @@
 import pytest
-from faults import FaultDetector
+from faults import FaultEquationOne, Cache
 
 '''
 to see print statements in pytest run with
@@ -8,58 +8,33 @@ $ pytest tests/unit/test_ahu_fc1.py -rP
 duct static pressure low when fan at full speed
 '''
 
+
 @pytest.fixture
-def fault_detector():
-    return FaultDetector()
+def fault_equation_one():
+    fe_one = FaultEquationOne()
+    fe_one.supply_air_static_pressure_err_thres_pv = 0.1
+    fe_one.fan_vfd_max_speed_err_thres_pv = 100.0
+    fe_one.fan_vfd_err_thres_pv = 5.0
+    return fe_one
 
+def test_fault_true(fault_equation_one):
+    fault_equation_one.clear_caches()
+    fault_equation_one.add_supply_air_static_pressure_data(0.4)
+    fault_equation_one.add_supply_air_static_pressure_setpoint_data(1.0)
+    fault_equation_one.add_fan_vfd_data(99.0)
+    assert fault_equation_one.fault_check_condition() == True
 
-def test_fault_check_condition_one_true(fault_detector):
-    # blantently obvious fan in fault
-    pressure_data = 0.4
-    setpoint_data = 1.0
-    motor_speed_data = 99.0
-    
-    fault_detector.fan_vfd_err_thres_pv = 5.0
-    fault_detector.fan_vfd_max_speed_err_thres_pv = 95.0
-    fault_detector.supply_air_static_pressure_err_thres_pv = 0.1
+def test_fault_fan_off_false(fault_equation_one):
+    fault_equation_one.clear_caches()
+    fault_equation_one.add_supply_air_static_pressure_data(0.4)
+    fault_equation_one.add_supply_air_static_pressure_setpoint_data(1.0)
+    fault_equation_one.add_fan_vfd_data(0.0)
+    assert fault_equation_one.fault_check_condition() == False
 
-    fault_detector.supply_air_static_pressure_cache.put(pressure_data)
-    fault_detector.supply_air_static_pressure_setpoint_cache.put(setpoint_data)
-    fault_detector.fan_vfd_cache.put(motor_speed_data)
+def test_no_fault_false(fault_equation_one):
+    fault_equation_one.clear_caches()
+    fault_equation_one.add_supply_air_static_pressure_data(1.4)
+    fault_equation_one.add_supply_air_static_pressure_setpoint_data(1.0)
+    fault_equation_one.add_fan_vfd_data(99.0)
+    assert fault_equation_one.fault_check_condition() == False
 
-    assert fault_detector.fault_check_condition_one() == True
-
-
-
-def test_fault_check_condition_one_false(fault_detector):
-    # blantently obvious fan NOT in fault
-    pressure_data = 0.99
-    setpoint_data = 1.0
-    motor_speed_data = 44.0
-    
-    fault_detector.fan_vfd_err_thres_pv = 5.0
-    fault_detector.fan_vfd_max_speed_err_thres_pv = 95.0
-    fault_detector.supply_air_static_pressure_err_thres_pv = 0.1
-
-    fault_detector.supply_air_static_pressure_cache.put(pressure_data)
-    fault_detector.supply_air_static_pressure_setpoint_cache.put(setpoint_data)
-    fault_detector.fan_vfd_cache.put(motor_speed_data)
-
-    assert fault_detector.fault_check_condition_one() == False
-    
-    
-def test_fault_check_condition_one_false_fan_off(fault_detector):
-    # blantently obvious fan in fault but fan is off or vfd is zero
-    pressure_data = 0.4
-    setpoint_data = 1.0
-    motor_speed_data = 0.0
-    
-    fault_detector.fan_vfd_err_thres_pv = 5.0
-    fault_detector.fan_vfd_max_speed_err_thres_pv = 95.0
-    fault_detector.supply_air_static_pressure_err_thres_pv = 0.1
-
-    fault_detector.supply_air_static_pressure_cache.put(pressure_data)
-    fault_detector.supply_air_static_pressure_setpoint_cache.put(setpoint_data)
-    fault_detector.fan_vfd_cache.put(motor_speed_data)
-
-    assert fault_detector.fault_check_condition_one() == False
