@@ -22,12 +22,20 @@ def test_fault_true(fault_equation_two):
     fault_equation_two.add_mix_air_temp_data(44.4)
     fault_equation_two.add_outside_air_temp_data(77.0)
     fault_equation_two.add_return_air_temp_data(55.0)
+<<<<<<< HEAD
     assert fault_equation_two.fault_check_condition() == True
+=======
+    assert fault_equation_two.run_fault_check() == True
+>>>>>>> fa8013851c6e329af4174ef1db9c7a10ce2a184e
 
 def test_fault_false(fault_equation_two):
     fault_equation_two.clear_caches()
     fault_equation_two.add_mix_air_temp_data(66.4)
     fault_equation_two.add_outside_air_temp_data(77.0)
     fault_equation_two.add_return_air_temp_data(55.0)
+<<<<<<< HEAD
     assert fault_equation_two.fault_check_condition() == False
+=======
+    assert fault_equation_two.run_fault_check() == False
+>>>>>>> fa8013851c6e329af4174ef1db9c7a10ce2a184e
 
