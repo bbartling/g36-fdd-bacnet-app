@@ -1,171 +1,110 @@
-import queue
-
-
-class FaultDetector:
+class Cache:
     def __init__(self):
-        
-        self.fan_status = None
-        
-        # FC1
-        self.supply_air_static_pressure_cache = queue.Queue()
-        self.supply_air_static_pressure_setpoint_cache = queue.Queue()
-        self.fan_vfd_cache = queue.Queue()
-        self.fan_vfd_err_thres_pv = None
-        self.fan_vfd_max_speed_err_thres_pv = None
-        self.supply_air_static_pressure_err_thres_pv = None
-        
-        # FC2
-        self.return_air_temp_sensor_cache = queue.Queue()
-        self.mixed_air_temp_sensor_cache = queue.Queue()
-        self.outside_air_temp_sensor_cache = queue.Queue()
-        self.mixed_air_temp_sensor_err_thres_pv = None
-        self.outside_air_temp_sensor_err_thres_pv = None
-        self.return_air_temp_sensor_err_thres_pv = None
+        self._items = []
 
+    def __bool__(self):
+        return bool(self._items)
 
-    def empty_queue_calc_mean(self, q):
-        total = 0
-        count = 0
-        if q.qsize() == 0:
-            return 0
+    def __len__(self):
+        return len(self._items)
+
+    def add(self, item: float) -> None:
+        self._items.append(item)
+
+    def mean(self) -> float:
+        if self._items:
+            mean_value = sum(self._items) / len(self._items)
+            self._items = []
         else:
-            while q.qsize() > 0:
-                data = q.get()
-                total += data
-                count += 1
-            return total / count
+            mean_value = 0.0
+        return mean_value
 
-    def fan_is_running(self):
-        return self.fan_status
+    def clear(self) -> None:
+        self._items.clear()
 
-    # FC1 equation, also assigns supply fan status
-    def hi_fan_speed_check(self, motor_speed_data):
-        motor_speed_mean = self.empty_queue_calc_mean(motor_speed_data)
+
+class FaultEquationOne:
+    def __init__(self):
+        # tuning params
+        self.supply_air_static_pressure_err_thres_pv = None
+        self.fan_vfd_max_speed_err_thres_pv = None
+        self.fan_vfd_err_thres_pv = None
+
+        # fan status
+        self.fan_status = False
+
+        # caches
+        self.supply_air_static_pressure_cache = Cache()
+        self.supply_air_static_pressure_setpoint_cache = Cache()
+        self.fan_vfd_cache = Cache()
+
+    # also assigns supply fan status
+    def hi_fan_speed_check(self) -> bool:
+        motor_speed_mean = self.fan_vfd_cache.mean()
         self.fan_status = True if motor_speed_mean > 0 else False
         return motor_speed_mean >= (
             self.fan_vfd_max_speed_err_thres_pv - self.fan_vfd_err_thres_pv
         )
 
-    # FC1 equation
-    def low_duct_pressure_check(self, pressure_data, setpoint_data):
-        pressure_mean = self.empty_queue_calc_mean(pressure_data)
-        setpoint_mean = self.empty_queue_calc_mean(setpoint_data)
+    def low_duct_pressure_check(self) -> bool:
+        pressure_mean = self.supply_air_static_pressure_cache.mean()
+        setpoint_mean = self.supply_air_static_pressure_setpoint_cache.mean()
         return pressure_mean < (
             setpoint_mean - self.supply_air_static_pressure_err_thres_pv
         )
 
-    def get_fault_one_data(self):
-        motor_speed_data = self.fan_vfd_cache
-        pressure_data = self.supply_air_static_pressure_cache
-        setpoint_data = self.supply_air_static_pressure_setpoint_cache
-        return pressure_data, setpoint_data, motor_speed_data
+    def run_fault_check(self) -> bool:
+        return self.low_duct_pressure_check() and self.hi_fan_speed_check()
 
-    def fault_check_condition_one(self):
-        pressure_data, setpoint_data, motor_speed_data = self.get_fault_one_data()
-        return self.low_duct_pressure_check(
-            pressure_data, setpoint_data
-        ) and self.hi_fan_speed_check(motor_speed_data)
-        
+    def add_supply_air_static_pressure_data(self, data) -> None:
+        self.supply_air_static_pressure_cache.add(data)
 
-    def get_fault_two_data(self):
-        return_temp_data = self.return_air_temp_sensor_cache
-        mix_temp_data = self.mixed_air_temp_sensor_cache
-        out_temp_data = self.outside_air_temp_sensor_cache
-        return return_temp_data, mix_temp_data, out_temp_data
-    
-    # FC2 equation for low mix air temp condition
-    def mat_vs_oatrat_check(self, return_temp_data, mix_temp_data, out_temp_data):
-        return_temp_mean = self.empty_queue_calc_mean(return_temp_data)
-        mix_temp_mean = self.empty_queue_calc_mean(mix_temp_data)
-        out_temp_mean = self.empty_queue_calc_mean(out_temp_data)
-        
-        return mix_temp_mean + self.mixed_air_temp_sensor_err_thres_pv < min(
-            (return_temp_mean - self.return_air_temp_sensor_err_thres_pv),
-            (out_temp_mean - self.outside_air_temp_sensor_err_thres_pv)
-        )
+    def add_supply_air_static_pressure_setpoint_data(self, data) -> None:
+        self.supply_air_static_pressure_setpoint_cache.add(data)
 
-    def fault_check_condition_two(self):
-        return_temp_data, mix_temp_data, out_temp_data = self.get_fault_two_data()
-        return self.mat_vs_oatrat_check(
-            return_temp_data, mix_temp_data, out_temp_data
-        ) and self.fan_is_running()
-        
-    
-    def get_fault_three_data(self):
-        pass
+    def add_fan_vfd_data(self, data) -> None:
+        self.fan_vfd_cache.add(data)
 
-    def fault_check_condition_three(self):
-        return False
-    
-    def get_fault_four_data(self):
-        pass
+    def clear_caches(self) -> None:
+        self.supply_air_static_pressure_cache.clear()
+        self.supply_air_static_pressure_setpoint_cache.clear()
+        self.fan_vfd_cache.clear()
 
-    def fault_check_condition_four(self):
-        return False
-    
-    def get_fault_five_data(self):
-        pass
 
-    def fault_check_condition_five(self):
-        return False
-    
-    def get_fault_six_data(self):
-        pass
+class FaultEquationTwo:
+    def __init__(self):
+        # tuning params
+        self.mix_air_temp_sensor_err_thres_pv = None
+        self.outside_air_temp_sensor_err_thres_pv = None
+        self.return_air_temp_sensor_err_thres_pv = None
 
-    def fault_check_condition_six(self):
-        return False
-    
-    def get_fault_seven_data(self):
-        pass
+        # caches
+        self.mix_air_temp_sensor_cache = Cache()
+        self.outside_air_temp_sensor_cache = Cache()
+        self.return_air_temp_sensor_cache = Cache()
 
-    def fault_check_condition_seven(self):
-        return False
-    
-    def get_fault_eight_data(self):
-        pass
+    def run_fault_check(self) -> bool:
+        mix_temp_mean = self.mix_air_temp_sensor_cache.mean()
+        out_temp_mean = self.outside_air_temp_sensor_cache.mean()
+        return_temp_mean = self.return_air_temp_sensor_cache.mean()
 
-    def fault_check_condition_eight(self):
-        return False
-    
-    def get_fault_nine_data(self):
-        pass
+        mix_calc = mix_temp_mean + self.mix_air_temp_sensor_err_thres_pv
+        return_calc = return_temp_mean - self.return_air_temp_sensor_err_thres_pv
+        out_calc = out_temp_mean - self.outside_air_temp_sensor_err_thres_pv
+        min_return_out = min(return_calc, out_calc)
 
-    def fault_check_condition_nine(self):
-        return False
-    
-    def get_fault_ten_data(self):
-        pass
+        return mix_calc < min_return_out
 
-    def fault_check_condition_ten(self):
-        return False
-    
-    def get_fault_eleven_data(self):
-        pass
+    def add_mix_air_temp_data(self, data) -> None:
+        self.mix_air_temp_sensor_cache.add(data)
 
-    def fault_check_condition_eleven(self):
-        return None
-    
-    def get_fault_twelve_data(self):
-        pass
+    def add_outside_air_temp_data(self, data) -> None:
+        self.outside_air_temp_sensor_cache.add(data)
 
-    def fault_check_condition_twelve(self):
-        return False
-    
-    def get_fault_thirteen_data(self):
-        pass
+    def add_return_air_temp_data(self, data) -> None:
+        self.return_air_temp_sensor_cache.add(data)
 
-    def fault_check_condition_thirteen(self):
-        return False
-    
-    def get_fault_fourteen_data(self):
-        pass
-
-    def fault_check_condition_fourteen(self):
-        return False
-    
-    def get_fault_fifteen_data(self):
-        pass
-
-    def fault_check_condition_fifteen(self):
-        return False
-
+    def clear_caches(self) -> None:
+        self.mix_air_temp_sensor_cache.clear()
+        self.outside_air_temp_sensor_cache.clear()
+        self.return_air_temp_sensor_cache.clear()
