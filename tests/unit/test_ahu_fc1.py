@@ -22,31 +22,19 @@ def test_fault_true(fault_equation_one):
     fault_equation_one.add_supply_air_static_pressure_data(0.4)
     fault_equation_one.add_supply_air_static_pressure_setpoint_data(1.0)
     fault_equation_one.add_fan_vfd_data(99.0)
-<<<<<<< HEAD
-    assert fault_equation_one.fault_check_condition() == True
-=======
     assert fault_equation_one.run_fault_check() == True
->>>>>>> fa8013851c6e329af4174ef1db9c7a10ce2a184e
 
 def test_fault_fan_off_false(fault_equation_one):
     fault_equation_one.clear_caches()
     fault_equation_one.add_supply_air_static_pressure_data(0.4)
     fault_equation_one.add_supply_air_static_pressure_setpoint_data(1.0)
     fault_equation_one.add_fan_vfd_data(0.0)
-<<<<<<< HEAD
-    assert fault_equation_one.fault_check_condition() == False
-=======
     assert fault_equation_one.run_fault_check() == False
->>>>>>> fa8013851c6e329af4174ef1db9c7a10ce2a184e
 
 def test_no_fault_false(fault_equation_one):
     fault_equation_one.clear_caches()
     fault_equation_one.add_supply_air_static_pressure_data(1.4)
     fault_equation_one.add_supply_air_static_pressure_setpoint_data(1.0)
     fault_equation_one.add_fan_vfd_data(99.0)
-<<<<<<< HEAD
-    assert fault_equation_one.fault_check_condition() == False
-=======
     assert fault_equation_one.run_fault_check() == False
->>>>>>> fa8013851c6e329af4174ef1db9c7a10ce2a184e
 

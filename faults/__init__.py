@@ -1,7 +1,3 @@
-<<<<<<< HEAD
-
-=======
->>>>>>> fa8013851c6e329af4174ef1db9c7a10ce2a184e
 class Cache:
     def __init__(self):
         self._items = []
@@ -14,20 +10,6 @@ class Cache:
 
     def add(self, item: float) -> None:
         self._items.append(item)
-<<<<<<< HEAD
-
-    def mean(self) -> float:
-        if self._items:
-            mean_value = sum(self._items) / len(self._items)
-            self._items = []
-        else:
-            mean_value = 0.0
-        return mean_value
-
-    def clear(self) -> None:
-        self._items.clear()
-=======
->>>>>>> fa8013851c6e329af4174ef1db9c7a10ce2a184e
 
     def mean(self) -> float:
         if self._items:
@@ -40,10 +22,7 @@ class Cache:
     def clear(self) -> None:
         self._items.clear()
 
-<<<<<<< HEAD
-=======
 
->>>>>>> fa8013851c6e329af4174ef1db9c7a10ce2a184e
 class FaultEquationOne:
     def __init__(self):
         # tuning params
@@ -74,11 +53,7 @@ class FaultEquationOne:
             setpoint_mean - self.supply_air_static_pressure_err_thres_pv
         )
 
-<<<<<<< HEAD
-    def fault_check_condition(self) -> bool:
-=======
     def run_fault_check(self) -> bool:
->>>>>>> fa8013851c6e329af4174ef1db9c7a10ce2a184e
         return self.low_duct_pressure_check() and self.hi_fan_speed_check()
 
     def add_supply_air_static_pressure_data(self, data) -> None:
@@ -89,53 +64,6 @@ class FaultEquationOne:
 
     def add_fan_vfd_data(self, data) -> None:
         self.fan_vfd_cache.add(data)
-<<<<<<< HEAD
-
-    def clear_caches(self) -> None:
-        self.supply_air_static_pressure_cache.clear()
-        self.supply_air_static_pressure_setpoint_cache.clear()
-        self.fan_vfd_cache.clear()
-
-        
-class FaultEquationTwo:
-    def __init__(self):
-        
-        # tuning params
-        self.mix_air_temp_sensor_err_thres_pv = None
-        self.outside_air_temp_sensor_err_thres_pv = None
-        self.return_air_temp_sensor_err_thres_pv = None
-
-        # caches
-        self.mix_air_temp_sensor_cache = Cache()
-        self.outside_air_temp_sensor_cache = Cache()
-        self.return_air_temp_sensor_cache = Cache()
-
-    def fault_check_condition(self) -> bool:
-        mix_temp_mean = self.mix_air_temp_sensor_cache.mean()
-        out_temp_mean = self.outside_air_temp_sensor_cache.mean()
-        return_temp_mean = self.return_air_temp_sensor_cache.mean()
-
-        mix_calc = mix_temp_mean + self.mix_air_temp_sensor_err_thres_pv
-        return_calc = return_temp_mean - self.return_air_temp_sensor_err_thres_pv
-        out_calc = out_temp_mean - self.outside_air_temp_sensor_err_thres_pv
-        min_return_out = min(return_calc,out_calc)
-
-        return mix_calc < min_return_out
-
-    def add_mix_air_temp_data(self, data) -> None:
-        self.mix_air_temp_sensor_cache.add(data)
-
-    def add_outside_air_temp_data(self, data) -> None:
-        self.outside_air_temp_sensor_cache.add(data)
-
-    def add_return_air_temp_data(self, data) -> None:
-        self.return_air_temp_sensor_cache.add(data)
-
-    def clear_caches(self) -> None:
-        self.mix_air_temp_sensor_cache.clear()
-        self.outside_air_temp_sensor_cache.clear()
-        self.return_air_temp_sensor_cache.clear()
-=======
 
     def clear_caches(self) -> None:
         self.supply_air_static_pressure_cache.clear()
@@ -175,7 +103,6 @@ class FaultEquationTwo:
 
     def add_return_air_temp_data(self, data) -> None:
         self.return_air_temp_sensor_cache.add(data)
->>>>>>> fa8013851c6e329af4174ef1db9c7a10ce2a184e
 
     def clear_caches(self) -> None:
         self.mix_air_temp_sensor_cache.clear()
